@@ -141,8 +141,10 @@ describe("[network] network", function () {
     validator.isValidIncomingBlock.resolves(true);
     const block = generateEmptySignedBlock();
     block.message.slot = 2020;
-    await Promise.all(new Array(5).fill(netB.gossip.publishBlock(block)));
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    for (let i = 0; i < 5; i++) {
+      await netB.gossip.publishBlock(block);
+    }
+    await received;
     expect(spy.callCount).to.be.equal(1);
   });
   it("should send/receive ping messages", async function () {
