@@ -153,17 +153,6 @@ export class ValidatorApi implements IValidatorApi {
         epoch
       );
     });
-    const subnets: Set<string> = new Set();
-    attesterDuties.forEach(duty => subnets.add(getCommitteeIndexSubnet(duty.committeeIndex)));
-    for (const subnet of subnets) {
-      const peerIds = this.reps.getPeerIdsBySubnet(subnet);
-      if (peerIds.length < 3) {
-        // If an insufficient number of current peers are subscribed to the topic,
-        // the validator must discover new peers on this topic
-        this.logger.info(`Found only ${peerIds.length} for subnett ${subnet}, finding new peers to connect`);
-        await this.network.connectToNewPeersBySubnet(parseInt(subnet), peerIds);
-      }
-    }
     return attesterDuties;
   }
 
@@ -237,6 +226,14 @@ export class ValidatorApi implements IValidatorApi {
       slot,
       committeeIndex
     );
+    const subnet = getCommitteeIndexSubnet(committeeIndex);
+    const peerIds = this.reps.getPeerIdsBySubnet(subnet);
+    if (peerIds.length < 3) {
+      // If an insufficient number of current peers are subscribed to the topic,
+      // the validator must discover new peers on this topic
+      this.logger.info(`Found only ${peerIds.length} for subnett ${subnet}, finding new peers to connect`);
+      await this.network.connectToNewPeersBySubnet(parseInt(subnet), peerIds);
+    }
   }
 
 }

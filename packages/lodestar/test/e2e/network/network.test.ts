@@ -17,7 +17,7 @@ import {MockBeaconChain} from "../../utils/mocks/chain/chain";
 import {IBeaconChain} from "../../../src/chain";
 import PeerId from "peer-id";
 import {ENR, Discv5Discovery} from "@chainsafe/discv5";
-import {createNode} from "./util";
+import {createNode} from "../../utils/network";
 
 const multiaddr = "/ip4/127.0.0.1/tcp/0";
 
@@ -61,8 +61,10 @@ describe("[network] network", function () {
       config
     });
     peerIdB = await createPeerId();
-    libP2pA = await createNode(multiaddr) as unknown as Libp2p;
-    libP2pB = await createNode(multiaddr, peerIdB) as unknown as Libp2p;
+    [libP2pA, libP2pB] = await Promise.all([
+      createNode(multiaddr) as unknown as Libp2p,
+      createNode(multiaddr, peerIdB) as unknown as Libp2p
+    ]);
     netA = new Libp2pNetwork(opts, {config, libp2p: libP2pA, logger, metrics, validator, chain});
     netB = new Libp2pNetwork(opts, {config, libp2p: libP2pB, logger, metrics, validator, chain});
     await Promise.all([

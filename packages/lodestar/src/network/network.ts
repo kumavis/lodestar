@@ -55,9 +55,10 @@ export class Libp2pNetwork extends (EventEmitter as { new(): NetworkEventEmitter
         this.peerInfo = libp2p.peerInfo;
         this.libp2p = libp2p;
         this.reqResp = new ReqResp(opts, {config, libp2p, logger});
-        this.gossip = (new Gossip(opts, {config, libp2p, logger, validator, chain})) as unknown as IGossip;
         const enr = opts.discv5 && opts.discv5.enr || undefined;
         this.metadata = new MetadataController({enr}, {config});
+        this.gossip = (new Gossip(opts, this.metadata,
+          {config, libp2p, logger, validator, chain})) as unknown as IGossip;
         resolve();
       });
     });
@@ -104,7 +105,11 @@ export class Libp2pNetwork extends (EventEmitter as { new(): NetworkEventEmitter
     await this.libp2p.hangUp(peerInfo);
   }
 
-  // peerIds: peers already have this subnet
+  /**
+   * Connect to new peers given a subnet.
+   * @param subnet the subnet calculated from committee index
+   * @param inPeerIds peers already have this subnet
+   */
   public async connectToNewPeersBySubnet(subnet: number, inPeerIds?: string[]): Promise<number> {
     const peerIds = inPeerIds || [];
     const discovery: Discv5Discovery = this.libp2p._discovery.get("discv5") as Discv5Discovery;
@@ -112,7 +117,13 @@ export class Libp2pNetwork extends (EventEmitter as { new(): NetworkEventEmitter
     const peerInfosForSubnet: PeerInfo[] = await Promise.all(
       discv5.kadValues()
         .filter((enr: ENR) => enr.get("attnets"))
-        .filter((enr: ENR) => this.config.types.AttestationSubnets.deserialize(enr.get("attnets"))[subnet])
+        .filter((enr: ENR) => {
+          try {
+            return this.config.types.AttestationSubnets.deserialize(enr.get("attnets"))[subnet];
+          } catch (err) {
+            return false;
+          }
+        })
         .map((enr: ENR) => enr.peerId().then((peerId) => {
           const peerInfo = new PeerInfo(peerId);
           peerInfo.multiaddrs.add(enr.multiaddrTCP);
@@ -123,9 +134,13 @@ export class Libp2pNetwork extends (EventEmitter as { new(): NetworkEventEmitter
     let count = 0;
     for (const peerInfo of peerInfos) {
       // we'll dial thru sendRequest so don't need to do connect(peerInfo) like in the spec
-      const metadata = await this.reqResp.metadata(peerInfo);
-      if (metadata.attnets[subnet]) {
-        count++;
+      try {
+        const metadata = await this.reqResp.metadata(peerInfo);
+        if (metadata.attnets[subnet]) {
+          count++;
+        }
+      } catch (err) {
+        this.logger.warn(`Cannot get metadata from ${peerInfo.id.toB58String()}`);
       }
       if (count < 10) {
         // TODO: decide max peers per subnet to connect?

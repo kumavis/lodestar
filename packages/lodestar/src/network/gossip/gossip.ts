@@ -4,7 +4,6 @@
  */
 
 import {EventEmitter} from "events";
-import LibP2p from "libp2p";
 import {IBeaconConfig} from "@chainsafe/lodestar-config";
 import {ATTESTATION_SUBNET_COUNT} from "../../constants";
 import {ILogger, LogLevel} from "@chainsafe/lodestar-utils/lib/logger";
@@ -36,6 +35,7 @@ import {
 } from "@chainsafe/lodestar-types";
 import {IBeaconChain} from "../../chain";
 import {computeForkDigest, computeEpochAtSlot} from "@chainsafe/lodestar-beacon-state-transition";
+import {MetadataController} from "../metadata";
 
 
 export type GossipHandlerFn = (this: Gossip, obj: GossipObject ) => void;
@@ -44,22 +44,27 @@ export class Gossip extends (EventEmitter as { new(): GossipEventEmitter }) impl
 
   protected readonly  opts: INetworkOptions;
   protected readonly config: IBeaconConfig;
-  protected readonly  libp2p: LibP2p;
   protected readonly  pubsub: IGossipSub;
   protected readonly chain: IBeaconChain;
   protected readonly  logger: ILogger;
 
   private handlers: Map<string, GossipHandlerFn>;
+  private metadata: MetadataController;
+  private attNetListenerCount: Map<string, number>;
 
-  public constructor(opts: INetworkOptions, {config, libp2p, logger, validator, chain}: IGossipModules) {
+  public constructor(
+    opts: INetworkOptions,
+    metadata: MetadataController,
+    {config, libp2p, logger, validator, chain, pubsub}: IGossipModules) {
     super();
     this.opts = opts;
+    this.metadata = metadata;
     this.config = config;
-    this.libp2p = libp2p;
     this.logger = logger.child({module: "gossip", level: LogLevel[logger.level]});
-    this.pubsub = new LodestarGossipsub(config, validator, this.logger,
+    this.pubsub = pubsub || new LodestarGossipsub(config, validator, this.logger,
       libp2p.peerInfo, libp2p.registrar, {gossipIncoming: true});
     this.chain = chain;
+    this.attNetListenerCount = new Map<string, number>();
   }
 
   public async start(): Promise<void> {
@@ -123,7 +128,30 @@ export class Gossip extends (EventEmitter as { new(): GossipEventEmitter }) impl
     subnet: number|string,
     callback?: (attestation: {attestation: Attestation; subnet: number}) => void
   ): void {
-    this.subscribe(forkDigest, GossipEvent.ATTESTATION_SUBNET, callback, new Map([["subnet", subnet.toString()]]));
+    // subscribe
+    const subnetNum: number = (typeof subnet === "string")? parseInt(subnet) : subnet as number;
+    const topic = getGossipTopic(GossipEvent.ATTESTATION_SUBNET, forkDigest, "ssz",
+      new Map([["subnet", subnet.toString()]]));
+    if (this.attNetListenerCount.get(topic) === undefined) {
+      this.attNetListenerCount.set(topic, 0);
+    }
+    const count = this.attNetListenerCount.get(topic);
+    if (count === 0) {
+      this.pubsub.subscribe(topic);
+    }
+    this.attNetListenerCount.set(topic, count + 1);
+    this.on(GossipEvent.ATTESTATION_SUBNET, ({attestation, subnet}: {attestation: Attestation; subnet: number}) => {
+      if (subnet === subnetNum && callback) {
+        callback({attestation, subnet});
+      }
+    });
+
+    // Metadata
+    const attnets = this.metadata.attnets;
+    if (!attnets[subnetNum]) {
+      attnets[subnetNum] = true;
+      this.metadata.attnets = attnets;
+    }
   }
 
   public unsubscribeFromAttestationSubnet(
@@ -131,7 +159,28 @@ export class Gossip extends (EventEmitter as { new(): GossipEventEmitter }) impl
     subnet: number|string,
     callback?: (attestation: {attestation: Attestation; subnet: number}) => void
   ): void {
-    this.unsubscribe(forkDigest, GossipEvent.ATTESTATION_SUBNET, callback, new Map([["subnet", subnet.toString()]]));
+    // Unsubscribe
+    const topic = getGossipTopic(GossipEvent.ATTESTATION_SUBNET, forkDigest, "ssz",
+      new Map([["subnet", subnet.toString()]]));
+    if (this.attNetListenerCount.get(topic) === undefined) {
+      this.attNetListenerCount.set(topic, 0);
+    }
+    let count = this.attNetListenerCount.get(topic);
+    if (count === 1) {
+      this.pubsub.unsubscribe(topic);
+    }
+    count = (count <= 1)? 0 : count - 1;
+    this.attNetListenerCount.set(topic, count);
+    if (callback) {
+      this.removeListener(GossipEvent.ATTESTATION_SUBNET, callback);
+    }
+    // Metadata
+    const subnetNum: number = (typeof subnet === "string")? parseInt(subnet) : subnet as number;
+    const attnets = this.metadata.attnets;
+    if (attnets[subnetNum]) {
+      attnets[subnetNum] = false;
+      this.metadata.attnets = attnets;
+    }
   }
 
   public unsubscribe(

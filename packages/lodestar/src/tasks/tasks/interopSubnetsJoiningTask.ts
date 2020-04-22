@@ -4,7 +4,7 @@ import {IBeaconConfig} from "@chainsafe/lodestar-config";
 import {ATTESTATION_SUBNET_COUNT} from "../../constants";
 import {randBetween} from "@chainsafe/lodestar-utils";
 import {IBeaconChain} from "../../chain";
-import {ForkDigest, AttestationSubnets} from "@chainsafe/lodestar-types";
+import {ForkDigest} from "@chainsafe/lodestar-types";
 
 export interface IInteropSubnetsJoiningModules {
   network: INetwork;
@@ -18,7 +18,7 @@ export class InteropSubnetsJoiningTask implements ITask {
   private readonly chain: IBeaconChain;
 
   private timers: (NodeJS.Timeout)[] = [];
-  
+
   public constructor(config: IBeaconConfig, modules: IInteropSubnetsJoiningModules) {
     this.config = config;
     this.network = modules.network;
@@ -27,14 +27,11 @@ export class InteropSubnetsJoiningTask implements ITask {
 
   public async run(): Promise<void> {
     const forkDigest = this.chain.currentForkDigest;
-    const attNets: AttestationSubnets = this.config.types.AttestationSubnets.defaultValue();
     for (let i = 0; i < this.config.params.RANDOM_SUBNETS_PER_VALIDATOR; i++) {
-      const subnet = this.subscribeToRandomSubnet(forkDigest);
-      attNets[subnet] = true;
+      this.subscribeToRandomSubnet(forkDigest);
     }
-    this.network.metadata.attnets = attNets;
   }
-  
+
   public async stop(): Promise<void> {
     this.timers.forEach((timer) => clearTimeout(timer));
   }
@@ -68,12 +65,8 @@ export class InteropSubnetsJoiningTask implements ITask {
   }
 
   private handleChangeSubnets = async (forkDigest: ForkDigest, subnet: number): Promise<void> => {
-    const attNets = this.network.metadata.attnets;
-    attNets[subnet] = false;
     this.network.gossip.unsubscribeFromAttestationSubnet(forkDigest, subnet, this.handleWireAttestation);
-    const newSubnet = this.subscribeToRandomSubnet(forkDigest);
-    attNets[newSubnet] = true;
-    this.network.metadata.attnets = attNets;
+    this.subscribeToRandomSubnet(forkDigest);
   };
 
   private handleWireAttestation = (): void => {

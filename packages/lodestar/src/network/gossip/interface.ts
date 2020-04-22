@@ -39,6 +39,7 @@ export interface IGossipModules {
   logger: ILogger;
   validator: IGossipMessageValidator;
   chain: IBeaconChain;
+  pubsub?: IGossipSub;
 }
 
 export interface IGossipSub extends EventEmitter {
@@ -87,7 +88,7 @@ export interface IGossipMessageValidator {
   isValidIncomingAttesterSlashing(attesterSlashing: AttesterSlashing): Promise<boolean>;
 }
 
-export type GossipObject = SignedBeaconBlock | Attestation | SignedAggregateAndProof | 
+export type GossipObject = SignedBeaconBlock | Attestation | SignedAggregateAndProof |
 SignedVoluntaryExit | ProposerSlashing | AttesterSlashing;
 
 export type GossipMessageValidatorFn = (message: GossipObject, subnet?: number) => Promise<boolean>;

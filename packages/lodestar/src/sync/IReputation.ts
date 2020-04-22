@@ -52,7 +52,7 @@ export class ReputationStore implements IReputationStore {
     }
     const peerIds = [];
     for (const [peerId, rep] of this.reputations) {
-      if (rep.latestMetadata.attnets[subnet]) {
+      if (rep.latestMetadata && rep.latestMetadata.attnets[subnet]) {
         peerIds.push(peerId);
       }
     }

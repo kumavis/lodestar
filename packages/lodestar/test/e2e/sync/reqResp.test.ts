@@ -8,7 +8,6 @@ import {Libp2pNetwork} from "../../../src/network";
 import {BeaconDb} from "../../../src/db";
 import Libp2p from "libp2p";
 import {MockBeaconChain} from "../../utils/mocks/chain/chain";
-import {createNode} from "../../unit/network/util";
 import {WinstonLogger} from "@chainsafe/lodestar-utils/lib/logger";
 import {INetworkOptions} from "../../../src/network/options";
 import {BeaconMetrics} from "../../../src/metrics";
@@ -24,6 +23,7 @@ import {generateEmptySignedBlock} from "../../utils/block";
 import {BeaconBlocksByRangeRequest, BeaconBlocksByRootRequest} from "@chainsafe/lodestar-types";
 import {BeaconReqRespHandler, IReqRespHandler} from "../../../src/sync/reqResp";
 import {sleep} from "../../utils/sleep";
+import {createNode} from "../../utils/network";
 
 const multiaddr = "/ip4/127.0.0.1/tcp/0";
 const opts: INetworkOptions = {
