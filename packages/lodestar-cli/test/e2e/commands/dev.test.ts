@@ -14,7 +14,6 @@ import {interopKeypair} from "../../../src/lodestar/interop/keypairs";
 import {ValidatorClient} from "@chainsafe/lodestar/lib/validator/nodejs";
 import {join} from "path";
 import {BeaconApi, ValidatorApi} from "@chainsafe/lodestar/lib/api/impl";
-import {ReputationStore} from "@chainsafe/lodestar/lib/sync/IReputation";
 
 const VALIDATOR_COUNT = 5;
 const SECONDS_PER_SLOT = 2;
@@ -104,7 +103,7 @@ describe("e2e interop simulation", function() {
       network: node.network,
       logger: new WinstonLogger({module: "API"}),
       chain: node.chain,
-      db: node.db,
+      db: node.db
     };
     modules.logger.silent = true;
     const rpcInstance = new ApiClientOverInstance({
