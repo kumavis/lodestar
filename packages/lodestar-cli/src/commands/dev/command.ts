@@ -148,7 +148,6 @@ export class DevCommand implements ICliCommand {
       chain: node.chain,
       network: node.network,
       db: node.db,
-      reps: new ReputationStore()
     };
     const rpcInstance = new ApiClientOverInstance({
       config: node.config,

@@ -15,6 +15,7 @@ export interface IReputationStore {
   remove(peerId: string): void;
   get(peerId: string): IReputation;
   getFromPeerInfo(peer: PeerInfo): IReputation;
+  getPeerIdsBySubnet(subnetStr: string): string[];
 }
 
 export class ReputationStore implements IReputationStore {

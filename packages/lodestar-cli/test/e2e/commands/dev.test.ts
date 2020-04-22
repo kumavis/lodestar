@@ -105,7 +105,6 @@ describe("e2e interop simulation", function() {
       logger: new WinstonLogger({module: "API"}),
       chain: node.chain,
       db: node.db,
-      reps: new ReputationStore(),
     };
     modules.logger.silent = true;
     const rpcInstance = new ApiClientOverInstance({

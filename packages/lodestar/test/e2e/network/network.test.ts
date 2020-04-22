@@ -18,6 +18,7 @@ import {IBeaconChain} from "../../../src/chain";
 import PeerId from "peer-id";
 import {ENR, Discv5Discovery} from "@chainsafe/discv5";
 import {createNode} from "../../utils/network";
+import {ReputationStore} from "../../../src/sync/IReputation";
 
 const multiaddr = "/ip4/127.0.0.1/tcp/0";
 
@@ -65,8 +66,8 @@ describe("[network] network", function () {
       createNode(multiaddr) as unknown as Libp2p,
       createNode(multiaddr, peerIdB) as unknown as Libp2p
     ]);
-    netA = new Libp2pNetwork(opts, {config, libp2p: libP2pA, logger, metrics, validator, chain});
-    netB = new Libp2pNetwork(opts, {config, libp2p: libP2pB, logger, metrics, validator, chain});
+    netA = new Libp2pNetwork(opts, new ReputationStore(), {config, libp2p: libP2pA, logger, metrics, validator, chain});
+    netB = new Libp2pNetwork(opts, new ReputationStore(), {config, libp2p: libP2pB, logger, metrics, validator, chain});
     await Promise.all([
       netA.start(),
       netB.start(),
@@ -250,9 +251,8 @@ describe("[network] network", function () {
     // let discv5 of A know enr of B
     const discovery: Discv5Discovery = libP2pA._discovery.get("discv5") as Discv5Discovery;
     discovery.discv5.addEnr(enrB);
-    const count = await netA.connectToNewPeersBySubnet(subnet, undefined);
+    await netA.searchSubnetPeers(subnet.toString());
     await connected;
     expect(netA.getPeers().length).to.be.equal(1);
-    expect(count).to.be.equal(1);
   });
 });

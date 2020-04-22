@@ -18,6 +18,7 @@ import {IGossip, IGossipMessageValidator} from "./gossip/interface";
 import {IBeaconChain} from "../chain";
 import {MetadataController} from "./metadata";
 import {Discv5Discovery, Discv5, ENR} from "@chainsafe/discv5";
+import {IReputationStore} from "../sync/IReputation";
 
 interface ILibp2pModules {
   config: IBeaconConfig;
@@ -42,13 +43,16 @@ export class Libp2pNetwork extends (EventEmitter as { new(): NetworkEventEmitter
   private inited: Promise<void>;
   private logger: ILogger;
   private metrics: IBeaconMetrics;
+  private peerReputations: IReputationStore;
 
-  public constructor(opts: INetworkOptions, {config, libp2p, logger, metrics, validator, chain}: ILibp2pModules) {
+  public constructor(opts: INetworkOptions,
+    reps: IReputationStore, {config, libp2p, logger, metrics, validator, chain}: ILibp2pModules) {
     super();
     this.opts = opts;
     this.config = config;
     this.logger = logger;
     this.metrics = metrics;
+    this.peerReputations = reps;
     // `libp2p` can be a promise as well as a libp2p object
     this.inited = new Promise((resolve) => {
       Promise.resolve(libp2p).then((libp2p) => {
@@ -105,31 +109,26 @@ export class Libp2pNetwork extends (EventEmitter as { new(): NetworkEventEmitter
     await this.libp2p.hangUp(peerInfo);
   }
 
+  public async  searchSubnetPeers(subnet: string): Promise<void> {
+    const peerIds = this.peerReputations.getPeerIdsBySubnet(subnet);
+    if (peerIds.length < 3) {
+      // If an insufficient number of current peers are subscribed to the topic,
+      // the validator must discover new peers on this topic
+      this.logger.info(`Found only ${peerIds.length} for subnett ${subnet}, finding new peers to connect`);
+      const count = await this.connectToNewPeersBySubnet(parseInt(subnet), peerIds);
+      this.logger.info(`Connected to ${count} new peers for subnet ${subnet}`);
+    }
+  }
+
   /**
    * Connect to new peers given a subnet.
    * @param subnet the subnet calculated from committee index
    * @param inPeerIds peers already have this subnet
    */
-  public async connectToNewPeersBySubnet(subnet: number, inPeerIds?: string[]): Promise<number> {
+  private async connectToNewPeersBySubnet(subnet: number, inPeerIds?: string[]): Promise<number> {
     const peerIds = inPeerIds || [];
-    const discovery: Discv5Discovery = this.libp2p._discovery.get("discv5") as Discv5Discovery;
-    const discv5: Discv5 = discovery.discv5;
-    const peerInfosForSubnet: PeerInfo[] = await Promise.all(
-      discv5.kadValues()
-        .filter((enr: ENR) => enr.get("attnets"))
-        .filter((enr: ENR) => {
-          try {
-            return this.config.types.AttestationSubnets.deserialize(enr.get("attnets"))[subnet];
-          } catch (err) {
-            return false;
-          }
-        })
-        .map((enr: ENR) => enr.peerId().then((peerId) => {
-          const peerInfo = new PeerInfo(peerId);
-          peerInfo.multiaddrs.add(enr.multiaddrTCP);
-          return peerInfo;
-        })));
-    const peerInfos = peerInfosForSubnet.filter(peerInfo => !peerIds.includes(peerInfo.id.toB58String()));
+    const discv5Peers = await this.searchDiscv5Peers(subnet) || [];
+    const peerInfos = discv5Peers.filter(peerInfo => !peerIds.includes(peerInfo.id.toB58String()));
     // make sure they still connect to same subnet
     let count = 0;
     for (const peerInfo of peerInfos) {
@@ -147,9 +146,28 @@ export class Libp2pNetwork extends (EventEmitter as { new(): NetworkEventEmitter
         break;
       }
     }
-    this.logger.info(`Connected to ${count} new peers for subnet ${subnet}`);
     return count;
   }
+
+  private searchDiscv5Peers = async (subnet: number): Promise<PeerInfo[]> => {
+    const discovery: Discv5Discovery = this.libp2p._discovery.get("discv5") as Discv5Discovery;
+    const discv5: Discv5 = discovery.discv5;
+    return await Promise.all(
+      discv5.kadValues()
+        .filter((enr: ENR) => enr.get("attnets"))
+        .filter((enr: ENR) => {
+          try {
+            return this.config.types.AttestationSubnets.deserialize(enr.get("attnets"))[subnet];
+          } catch (err) {
+            return false;
+          }
+        })
+        .map((enr: ENR) => enr.peerId().then((peerId) => {
+          const peerInfo = new PeerInfo(peerId);
+          peerInfo.multiaddrs.add(enr.multiaddrTCP);
+          return peerInfo;
+        })));
+  };
 
   private emitPeerConnect = (peerInfo: PeerInfo): void => {
     const conn = this.getConnection(peerInfo);

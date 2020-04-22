@@ -11,7 +11,6 @@ import {ILogger} from "@chainsafe/lodestar-utils/lib/logger";
 import {IBeaconSync} from "../sync";
 import {OpPool} from "../opPool";
 import {INetwork} from "../network";
-import {ReputationStore} from "../sync/IReputation";
 
 export interface IApiModules {
   config: IBeaconConfig;
@@ -22,7 +21,6 @@ export interface IApiModules {
   network: INetwork;
   db: IBeaconDb;
   eth1: IEth1Notifier;
-  reps: ReputationStore;
 }
 
 export interface IApiConstructor {

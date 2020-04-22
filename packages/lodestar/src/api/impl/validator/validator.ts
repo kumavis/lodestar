@@ -43,7 +43,6 @@ import {assembleAttesterDuty} from "../../../chain/factory/duties";
 import assert from "assert";
 import {assembleAttestation} from "../../../chain/factory/attestation";
 import {IBeaconSync} from "../../../sync";
-import {ReputationStore} from "../../../sync/IReputation";
 import {getCommitteeIndexSubnet} from "../../../network/gossip/utils";
 
 export class ValidatorApi implements IValidatorApi {
@@ -57,12 +56,11 @@ export class ValidatorApi implements IValidatorApi {
   private sync: IBeaconSync;
   private opPool: OpPool;
   private eth1: IEth1Notifier;
-  private reps: ReputationStore;
   private logger: ILogger;
 
   public constructor(
     opts: Partial<IApiOptions>,
-    modules: Pick<IApiModules, "config"|"chain"|"db"|"opPool"|"eth1"|"sync"|"network"|"reps"|"logger">
+    modules: Pick<IApiModules, "config"|"chain"|"db"|"opPool"|"eth1"|"sync"|"network"|"logger">
   ) {
     this.namespace = ApiNamespace.VALIDATOR;
     this.config = modules.config;
@@ -73,7 +71,6 @@ export class ValidatorApi implements IValidatorApi {
     this.logger = modules.logger;
     this.opPool = modules.opPool;
     this.eth1 = modules.eth1;
-    this.reps = modules.reps;
   }
 
   public async produceBlock(slot: Slot, validatorPubkey: BLSPubkey, randaoReveal: Bytes96): Promise<BeaconBlock> {
@@ -145,7 +142,7 @@ export class ValidatorApi implements IValidatorApi {
       return  state.validators.findIndex((v) => this.config.types.BLSPubkey.equals(v.pubkey, publicKey));
     }));
 
-    const attesterDuties = validatorIndexes.map((validatorIndex) => {
+    return validatorIndexes.map((validatorIndex) => {
       return assembleAttesterDuty(
         this.config,
         {publicKey: state.validators[validatorIndex].pubkey, index: validatorIndex},
@@ -153,7 +150,6 @@ export class ValidatorApi implements IValidatorApi {
         epoch
       );
     });
-    return attesterDuties;
   }
 
   public async publishAggregateAndProof(
@@ -227,13 +223,7 @@ export class ValidatorApi implements IValidatorApi {
       committeeIndex
     );
     const subnet = getCommitteeIndexSubnet(committeeIndex);
-    const peerIds = this.reps.getPeerIdsBySubnet(subnet);
-    if (peerIds.length < 3) {
-      // If an insufficient number of current peers are subscribed to the topic,
-      // the validator must discover new peers on this topic
-      this.logger.info(`Found only ${peerIds.length} for subnett ${subnet}, finding new peers to connect`);
-      await this.network.connectToNewPeersBySubnet(parseInt(subnet), peerIds);
-    }
+    await this.network.searchSubnetPeers(subnet);
   }
 
 }
