@@ -26,6 +26,7 @@ import {BeaconNodeOptions} from "../../lodestar/node/options";
 import {getConfig, getDevGenesisState, getPeerId, resetPath} from "./utils";
 import deepmerge from "deepmerge";
 import {isPlainObject} from "@chainsafe/lodestar-utils";
+import {ReputationStore} from "@chainsafe/lodestar/lib/sync/IReputation";
 
 export interface IDevCommandOptions {
   [key: string]: string;
@@ -146,7 +147,8 @@ export class DevCommand implements ICliCommand {
       logger: new WinstonLogger({module: "API"}),
       chain: node.chain,
       network: node.network,
-      db: node.db
+      db: node.db,
+      reps: new ReputationStore()
     };
     const rpcInstance = new ApiClientOverInstance({
       config: node.config,

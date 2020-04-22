@@ -69,6 +69,7 @@ export interface INetwork extends NetworkEventEmitter {
   hasPeer(peerInfo: PeerInfo): boolean;
   connect(peerInfo: PeerInfo): Promise<void>;
   disconnect(peerInfo: PeerInfo): Promise<void>;
+  connectToNewPeersBySubnet(subnet: number, peerIds: string[]): Promise<number>;
   // Service
   start(): Promise<void>;
   stop(): Promise<void>;

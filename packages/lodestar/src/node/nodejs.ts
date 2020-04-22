@@ -132,7 +132,8 @@ export class BeaconNode {
         sync: this.sync,
         network: this.network,
         chain: this.chain,
-        eth1: this.eth1
+        eth1: this.eth1,
+        reps: this.reps
       }
     );
     this.chores = new TasksService(

@@ -17,6 +17,7 @@ import {Gossip} from "./gossip/gossip";
 import {IGossip, IGossipMessageValidator} from "./gossip/interface";
 import {IBeaconChain} from "../chain";
 import {MetadataController} from "./metadata";
+import {Discv5Discovery, Discv5, ENR} from "@chainsafe/discv5";
 
 interface ILibp2pModules {
   config: IBeaconConfig;
@@ -101,6 +102,38 @@ export class Libp2pNetwork extends (EventEmitter as { new(): NetworkEventEmitter
 
   public async disconnect(peerInfo: PeerInfo): Promise<void> {
     await this.libp2p.hangUp(peerInfo);
+  }
+
+  // peerIds: peers already have this subnet
+  public async connectToNewPeersBySubnet(subnet: number, inPeerIds?: string[]): Promise<number> {
+    const peerIds = inPeerIds || [];
+    const discovery: Discv5Discovery = this.libp2p._discovery.get("discv5") as Discv5Discovery;
+    const discv5: Discv5 = discovery.discv5;
+    const peerInfosForSubnet: PeerInfo[] = await Promise.all(
+      discv5.kadValues()
+        .filter((enr: ENR) => enr.get("attnets"))
+        .filter((enr: ENR) => this.config.types.AttestationSubnets.deserialize(enr.get("attnets"))[subnet])
+        .map((enr: ENR) => enr.peerId().then((peerId) => {
+          const peerInfo = new PeerInfo(peerId);
+          peerInfo.multiaddrs.add(enr.multiaddrTCP);
+          return peerInfo;
+        })));
+    const peerInfos = peerInfosForSubnet.filter(peerInfo => !peerIds.includes(peerInfo.id.toB58String()));
+    // make sure they still connect to same subnet
+    let count = 0;
+    for (const peerInfo of peerInfos) {
+      // we'll dial thru sendRequest so don't need to do connect(peerInfo) like in the spec
+      const metadata = await this.reqResp.metadata(peerInfo);
+      if (metadata.attnets[subnet]) {
+        count++;
+      }
+      if (count < 10) {
+        // TODO: decide max peers per subnet to connect?
+        break;
+      }
+    }
+    this.logger.info(`Connected to ${count} new peers for subnet ${subnet}`);
+    return count;
   }
 
   private emitPeerConnect = (peerInfo: PeerInfo): void => {
