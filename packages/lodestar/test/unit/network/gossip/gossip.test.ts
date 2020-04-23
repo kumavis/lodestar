@@ -71,7 +71,17 @@ describe("Network Gossip", function() {
       expect(anotherSpy.callCount).to.be.equal(1);
     });
 
-    it("should unsubscribe to attestation subnet correctly", async () => {
+    it("should unsubscribe to single subnet correctly", async () => {
+      const spy = sandbox.spy();
+      gossip.subscribeToAttestationSubnet(chain.currentForkDigest, "1", spy);
+      // should not unsubscribe wrong subnet
+      gossip.unsubscribeFromAttestationSubnet(chain.currentForkDigest, "1", spy);
+      const attestation = generateEmptyAttestation();
+      pubsub.emit(getGossipTopic(GossipEvent.ATTESTATION_SUBNET, chain.currentForkDigest, "ssz", new Map([["subnet", "1"]])), attestation);
+      expect(spy.callCount).to.be.equal(0);
+    });
+
+    it("should unsubscribe across subnets correctly", async () => {
       const spy = sandbox.spy();
       gossip.subscribeToAttestationSubnet(chain.currentForkDigest, "1", spy);
       const spy2 = sandbox.spy();

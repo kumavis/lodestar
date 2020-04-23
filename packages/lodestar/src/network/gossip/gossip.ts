@@ -50,7 +50,11 @@ export class Gossip extends (EventEmitter as { new(): GossipEventEmitter }) impl
 
   private handlers: Map<string, GossipHandlerFn>;
   private metadata: MetadataController;
+  // map of gossip topic and listener count
   private attNetListenerCount: Map<string, number>;
+  // map of the callback from consumer and our wrapped callback
+  private attNetListeners: Map<(attestation: {attestation: Attestation; subnet: number}) => void,
+  (...args: unknown[]) => void>;
 
   public constructor(
     opts: INetworkOptions,
@@ -65,6 +69,8 @@ export class Gossip extends (EventEmitter as { new(): GossipEventEmitter }) impl
       libp2p.peerInfo, libp2p.registrar, {gossipIncoming: true});
     this.chain = chain;
     this.attNetListenerCount = new Map<string, number>();
+    this.attNetListeners = new Map<(attestation: {attestation: Attestation; subnet: number}) => void,
+    (...args: unknown[]) => void>();
   }
 
   public async start(): Promise<void> {
@@ -140,11 +146,15 @@ export class Gossip extends (EventEmitter as { new(): GossipEventEmitter }) impl
       this.pubsub.subscribe(topic);
     }
     this.attNetListenerCount.set(topic, count + 1);
-    this.on(GossipEvent.ATTESTATION_SUBNET, ({attestation, subnet}: {attestation: Attestation; subnet: number}) => {
-      if (subnet === subnetNum && callback) {
-        callback({attestation, subnet});
-      }
-    });
+    if (callback) {
+      const wrappedCallback = ({attestation, subnet}: {attestation: Attestation; subnet: number}): void => {
+        if (subnet === subnetNum) {
+          callback({attestation, subnet});
+        }
+      };
+      this.attNetListeners.set(callback, wrappedCallback as (...args: unknown[]) => void);
+      this.on(GossipEvent.ATTESTATION_SUBNET, wrappedCallback);
+    }
 
     // Metadata
     const attnets = this.metadata.attnets;
@@ -171,8 +181,9 @@ export class Gossip extends (EventEmitter as { new(): GossipEventEmitter }) impl
     }
     count = (count <= 1)? 0 : count - 1;
     this.attNetListenerCount.set(topic, count);
-    if (callback) {
-      this.removeListener(GossipEvent.ATTESTATION_SUBNET, callback);
+    if (callback && this.attNetListeners.get(callback)) {
+      this.removeListener(GossipEvent.ATTESTATION_SUBNET, this.attNetListeners.get(callback));
+      this.attNetListeners.delete(callback);
     }
     // Metadata
     const subnetNum: number = (typeof subnet === "string")? parseInt(subnet) : subnet as number;
